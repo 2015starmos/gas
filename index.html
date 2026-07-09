@@ -355,10 +355,10 @@
         note: document.getElementById('note').value,
         createAt: new Date()
       }
-      if(!data.callTime || !data.gasPrice){
-        alert('請填寫呼叫時間與瓦斯單價');
-        return;
-      }
+if(!data.callTime || !data.gasPrice){
+  alert('請填寫呼叫時間與瓦斯單價');
+  return;
+}
       await firebase.addDoc(colRef, data);
       alert('新增成功');
       ['callTime','gasPrice','changeTime','note'].forEach(id=>document.getElementById(id).value='');

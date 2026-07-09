@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>瓦斯記錄管理系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, orderBy, query } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-    window.firebase = { initializeApp, getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, orderBy, query }
-  </script>
+  <!-- 改用传统全局CDN，解决module移动端挂载失败的问题 -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -316,9 +314,9 @@
       appId: "1:751562537973:web:a4643ba351245511fc7ebc"
     };
 
-    const app = firebase.initializeApp(firebaseConfig);
-    const db = firebase.getFirestore(app);
-    const colRef = firebase.collection(db, "gas_records");
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const colRef = collection(db, "gas_records");
 
     function checkLogin(){
       const input = document.getElementById('loginPwd').value.trim();
@@ -355,19 +353,19 @@
         note: document.getElementById('note').value,
         createAt: new Date()
       }
-if(!data.callTime || !data.gasPrice){
-  alert('請填寫呼叫時間與瓦斯單價');
-  return;
-}
-      await firebase.addDoc(colRef, data);
+      if(!data.callTime || !data.gasPrice){
+        alert('請填寫呼叫時間與瓦斯單價');
+        return;
+      }
+      await addDoc(colRef, data);
       alert('新增成功');
       ['callTime','gasPrice','changeTime','note'].forEach(id=>document.getElementById(id).value='');
       loadAllRecords();
     }
 
     async function loadAllRecords(){
-      const q = firebase.query(colRef, firebase.orderBy("createAt", "desc"));
-      const snap = await firebase.getDocs(q);
+      const q = query(colRef, orderBy("createAt", "desc"));
+      const snap = await getDocs(q);
       const listEl = document.getElementById('recordList');
       listEl.innerHTML = '';
       window.allRecordData = [];
@@ -427,8 +425,8 @@ if(!data.callTime || !data.gasPrice){
 
     async function saveEdit(){
       const docId = document.getElementById('editDocId').value;
-      const ref = firebase.doc(db, "gas_records", docId);
-      await firebase.updateDoc(ref, {
+      const ref = doc(db, "gas_records", docId);
+      await updateDoc(ref, {
         callTime: document.getElementById('eCallTime').value,
         gasPrice: Number(document.getElementById('eGasPrice').value),
         changeTime: document.getElementById('eChangeTime').value,
@@ -441,15 +439,15 @@ if(!data.callTime || !data.gasPrice){
 
     async function delRecord(docId){
       if(!confirm('確認刪除此筆紀錄？')) return;
-      const ref = firebase.doc(db, "gas_records", docId);
-      await firebase.deleteDoc(ref);
+      const ref = doc(db, "gas_records", docId);
+      await deleteDoc(ref);
       loadAllRecords();
     }
 
     function exportExcel(){
       const ws = XLSX.utils.json_to_sheet(window.allRecordData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "瓦斯紀錄");
+      XLSX.utils.book_append_sheet(wb, "瓦斯紀錄");
       XLSX.writeFile(wb, "瓦斯紀錄備份.xlsx");
     }
 
@@ -499,7 +497,7 @@ if(!data.callTime || !data.gasPrice){
         if(!confirm(`將匯入 ${arr.length} 筆資料，確認？`)) return;
         for(let item of arr){
           delete item.id;
-          await firebase.addDoc(colRef, item);
+          await addDoc(colRef, item);
         }
         alert('匯入完畢');
         loadAllRecords();

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>瓦斯記錄管理系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, orderBy, query } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+    window.firebase = { initializeApp, getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, orderBy, query }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#00C6FF',
+            secondary: '#0072FF',
+            accent: '#FF6B6B',
+            dark: '#0F172A',
+            panel: 'rgba(255,255,255,0.08)'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .glass {
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(22px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 1.25rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+      .glow-blue {
+        box-shadow: 0 0 20px rgba(0, 198, 255, 0.45);
+      }
+      .glow-text {
+        text-shadow: 0 0 18px rgba(0, 198, 255, 0.8);
+      }
+      .btn-gradient {
+        background: linear-gradient(135deg, #00C6FF, #0072FF);
+        color: white;
+        transition: all 0.3s ease;
+      }
+      .btn-gradient:hover {
+        background: linear-gradient(135deg, #00D8FF, #0088FF);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(0, 198, 255, 0.45);
+      }
+      .btn-outline-glow {
+        border: 1px solid rgba(0, 198, 255, 0.6);
+        color: #00C6FF;
+        transition: all 0.3s ease;
+      }
+      .btn-outline-glow:hover {
+        background: rgba(0, 198, 255, 0.12);
+        box-shadow: 0 0 18px rgba(0, 198, 255, 0.35);
+        transform: translateY(-2px);
+      }
+      .input-glow {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: white;
+        transition: all 0.3s ease;
+      }
+      .input-glow:focus {
+        border-color: #00C6FF;
+        box-shadow: 0 0 0 2px rgba(0, 198, 255, 0.25), 0 0 18px rgba(0, 198, 255, 0.35);
+        outline: none;
+      }
+      .table-glow th {
+        background: linear-gradient(135deg, rgba(0, 198, 255, 0.15), rgba(0, 114, 255, 0.15));
+      }
+      .row-hover:hover {
+        background: rgba(0, 198, 255, 0.08);
+      }
+    }
+
+    body {
+      background: radial-gradient(circle at top left, #0F172A 0%, #1E293B 45%, #0F172A 100%);
+      min-height: 100vh;
+      color: white;
+    }
+
+    .bg-orb {
+      position: fixed;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 198, 255, 0.45), transparent 70%);
+      filter: blur(100px);
+      animation: float 8s ease-in-out infinite;
+      z-index: -1;
+    }
+
+    .bg-orb.second {
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(0, 114, 255, 0.35), transparent 70%);
+      animation-delay: 4s;
+      bottom: -100px;
+      right: -80px;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(30px, -30px); }
+    }
+
+    .fade-in {
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-orb"></div>
+  <div class="bg-orb second"></div>
+
+  <!-- 登入頁面 -->
+  <div id="loginPage" class="flex items-center justify-center min-h-screen px-4">
+    <div class="glass-card w-full max-w-md p-8 fade-in">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center mb-4 glow-blue">
+          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          </svg>
+        </div>
+        <h2 class="text-3xl font-bold glow-text">瓦斯記錄管理系統</h2>
+        <p class="text-gray-300 mt-2">請輸入登入密碼進入系統</p>
+      </div>
+      <input type="password" id="loginPwd" placeholder="請輸入密碼" class="input-glow w-full px-4 py-3 rounded-lg mb-4">
+      <button onclick="checkLogin()" class="btn-gradient w-full py-3 rounded-lg font-semibold">登入系統</button>
+      <p id="loginErr" class="text-red-400 text-sm mt-3 hidden text-center">密碼錯誤，請重新輸入</p>
+    </div>
+  </div>
+
+  <!-- 主系統頁面 -->
+  <div id="mainPage" class="hidden container mx-auto px-4 py-8 max-w-7xl fade-in">
+    <header class="flex flex-wrap justify-between items-center mb-10 gap-4">
+      <div>
+        <h1 class="text-3xl md:text-4xl font-bold glow-text">瓦斯使用雲端記錄系統</h1>
+        <p class="text-gray-400 mt-1">記錄呼叫時間、單價、更換時間，資料同步至 Firebase Firestore</p>
+      </div>
+      <div class="flex gap-3 flex-wrap">
+        <button onclick="exportExcel()" class="btn-outline-glow px-4 py-2.5 rounded-lg font-medium flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+          </svg>
+          匯出Excel備份
+        </button>
+        <button onclick="exportPDF()" class="btn-outline-glow px-4 py-2.5 rounded-lg font-medium flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0v6m-6-6h12M7 21h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          匯出PDF報表(可列印)
+        </button>
+        <label class="btn-outline-glow px-4 py-2.5 rounded-lg font-medium cursor-pointer flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"></path>
+          </svg>
+          匯入Excel備份
+          <input type="file" id="importFile" accept=".xlsx,.xls" class="hidden" onchange="importExcel(event)">
+        </label>
+        <button onclick="logout()" class="border border-red-400 text-red-400 px-4 py-2.5 rounded-lg font-medium hover:bg-red-500/10 transition">
+          登出
+        </button>
+      </div>
+    </header>
+
+    <!-- 統計卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div class="glass-card p-6">
+        <div class="text-gray-300 text-sm">總記錄筆數</div>
+        <div id="totalCount" class="text-3xl font-bold mt-2 glow-text">0</div>
+      </div>
+      <div class="glass-card p-6">
+        <div class="text-gray-300 text-sm">平均單價</div>
+        <div id="avgPrice" class="text-3xl font-bold mt-2 text-green-400">$ 0</div>
+      </div>
+      <div class="glass-card p-6">
+        <div class="text-gray-300 text-sm">最近更換</div>
+        <div id="lastChange" class="text-3xl font-bold mt-2 text-blue-400">-</div>
+      </div>
+    </div>
+
+    <!-- 新增瓦斯紀錄表單 -->
+    <div class="glass-card p-6 mb-8">
+      <h3 class="text-xl font-semibold mb-6 flex items-center gap-2">
+        <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        新增瓦斯訂購 / 更換紀錄
+      </h3>
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">呼叫瓦斯時間</label>
+          <input type="datetime-local" id="callTime" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">單價 (元/桶)</label>
+          <input type="number" step="0.01" id="gasPrice" placeholder="例如 900" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">更換瓦斯時間</label>
+          <input type="datetime-local" id="changeTime" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">備註資訊</label>
+          <input type="text" id="note" placeholder="地點 / 廠商 / 備註" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+      </div>
+      <button onclick="addGasRecord()" class="btn-gradient mt-6 px-6 py-3 rounded-lg font-semibold flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        儲存至雲端 Firebase
+      </button>
+    </div>
+
+    <!-- 紀錄列表 -->
+    <div class="glass-card p-6">
+      <h3 class="text-xl font-semibold mb-6 flex items-center gap-2">
+        <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+        </svg>
+        全部瓦斯歷史紀錄
+      </h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm table-glow rounded-lg overflow-hidden">
+          <thead>
+            <tr>
+              <th class="py-3 px-4 text-left">呼叫時間</th>
+              <th class="py-3 px-4 text-left">瓦斯單價</th>
+              <th class="py-3 px-4 text-left">更換時間</th>
+              <th class="py-3 px-4 text-left">備註</th>
+              <th class="py-3 px-4 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody id="recordList"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 編輯彈窗 -->
+  <div id="editModal" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center z-50 px-4">
+    <div class="glass-card w-full max-w-lg p-6 fade-in">
+      <h3 class="text-xl font-semibold mb-6">編輯瓦斯紀錄</h3>
+      <input type="hidden" id="editDocId">
+      <div class="grid gap-4">
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">呼叫瓦斯時間</label>
+          <input type="datetime-local" id="eCallTime" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">單價</label>
+          <input type="number" step="0.01" id="eGasPrice" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">更換瓦斯時間</label>
+          <input type="datetime-local" id="eChangeTime" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-300 block mb-1.5">備註</label>
+          <input type="text" id="eNote" class="input-glow w-full px-3 py-2.5 rounded-lg">
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button onclick="saveEdit()" class="btn-gradient px-6 py-2.5 rounded-lg font-medium">儲存修改</button>
+        <button onclick="closeEditModal()" class="btn-outline-glow px-6 py-2.5 rounded-lg font-medium">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const RAW_PASSWORD = "0963612120";
+    const HASH_PASSWORD = CryptoJS.MD5(RAW_PASSWORD).toString();
+
+    document.addEventListener('keydown', e => {
+      if(e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key)) || (e.ctrlKey && e.key === 'u')) {
+        e.preventDefault();
+        return false;
+      }
+    })
+    document.oncontextmenu = e => e.preventDefault();
+
+    // 已替換為你的專案參數
+    const firebaseConfig = {
+      apiKey: "AIzaSyDnhxXFSCDqsyzxfO-a_bTxMXQ44Fb-DiA",
+      authDomain: "gas-record-system-bf60b.firebaseapp.com",
+      projectId: "gas-record-system-bf60b",
+      storageBucket: "gas-record-system-bf60b.firebasestorage.app",
+      messagingSenderId: "751562537973",
+      appId: "1:751562537973:web:a4643ba351245511fc7ebc"
+    };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.getFirestore(app);
+    const colRef = firebase.collection(db, "gas_records");
+
+    function checkLogin(){
+      const input = document.getElementById('loginPwd').value.trim();
+      const inputHash = CryptoJS.MD5(input).toString();
+      if(inputHash === HASH_PASSWORD){
+        localStorage.setItem('gasLoginHash', HASH_PASSWORD);
+        document.getElementById('loginPage').classList.add('hidden');
+        document.getElementById('mainPage').classList.remove('hidden');
+        loadAllRecords();
+      }else{
+        document.getElementById('loginErr').classList.remove('hidden');
+      }
+    }
+
+    window.onload = () => {
+      const savedHash = localStorage.getItem('gasLoginHash');
+      if(savedHash === HASH_PASSWORD){
+        document.getElementById('loginPage').classList.add('hidden');
+        document.getElementById('mainPage').classList.remove('hidden');
+        loadAllRecords();
+      }
+    }
+
+    function logout(){
+      localStorage.removeItem('gasLoginHash');
+      location.reload();
+    }
+
+    async function addGasRecord(){
+      const data = {
+        callTime: document.getElementById('callTime').value,
+        gasPrice: Number(document.getElementById('gasPrice').value),
+        changeTime: document.getElementById('changeTime').value,
+        note: document.getElementById('note').value,
+        createAt: new Date()
+      }
+      if(!data.callTime || !data.gasPrice){
+        alert('請填寫呼叫時間與瓦斯單價');
+        return;
+      }
+      await firebase.addDoc(colRef, data);
+      alert('新增成功');
+      ['callTime','gasPrice','changeTime','note'].forEach(id=>document.getElementById(id).value='');
+      loadAllRecords();
+    }
+
+    async function loadAllRecords(){
+      const q = firebase.query(colRef, firebase.orderBy("createAt", "desc"));
+      const snap = await firebase.getDocs(q);
+      const listEl = document.getElementById('recordList');
+      listEl.innerHTML = '';
+      window.allRecordData = [];
+
+      snap.forEach(doc=>{
+        const d = doc.data();
+        d.id = doc.id;
+        window.allRecordData.push(d);
+        const tr = document.createElement('tr');
+        tr.className = "border-b border-white/10 row-hover transition";
+        tr.innerHTML = `
+          <td class="py-3 px-4">${d.callTime || '-'}</td>
+          <td class="py-3 px-4">${d.gasPrice}</td>
+          <td class="py-3 px-4">${d.changeTime || '-'}</td>
+          <td class="py-3 px-4">${d.note || '-'}</td>
+          <td class="py-3 px-4 text-center">
+            <button onclick="openEdit('${d.id}')" class="text-primary mr-3 hover:underline">編輯</button>
+            <button onclick="delRecord('${d.id}')" class="text-red-400 hover:underline">刪除</button>
+          </td>
+        `;
+        listEl.appendChild(tr);
+      })
+
+      updateStats();
+    }
+
+    function updateStats(){
+      const records = window.allRecordData || [];
+      document.getElementById('totalCount').textContent = records.length;
+
+      if(records.length > 0){
+        const avg = records.reduce((sum, r) => sum + (Number(r.gasPrice) || 0), 0) / records.length;
+        document.getElementById('avgPrice').textContent = "$ " + avg.toFixed(0);
+
+        const last = records.find(r => r.changeTime);
+        document.getElementById('lastChange').textContent = last ? last.changeTime : '-';
+      }else{
+        document.getElementById('avgPrice').textContent = "$ 0";
+        document.getElementById('lastChange').textContent = '-';
+      }
+    }
+
+    function openEdit(docId){
+      const row = window.allRecordData.find(x=>x.id === docId);
+      if(!row) return;
+      document.getElementById('editDocId').value = docId;
+      document.getElementById('eCallTime').value = row.callTime;
+      document.getElementById('eGasPrice').value = row.gasPrice;
+      document.getElementById('eChangeTime').value = row.changeTime;
+      document.getElementById('eNote').value = row.note;
+      document.getElementById('editModal').classList.remove('hidden');
+    }
+
+    function closeEditModal(){
+      document.getElementById('editModal').classList.add('hidden');
+    }
+
+    async function saveEdit(){
+      const docId = document.getElementById('editDocId').value;
+      const ref = firebase.doc(db, "gas_records", docId);
+      await firebase.updateDoc(ref, {
+        callTime: document.getElementById('eCallTime').value,
+        gasPrice: Number(document.getElementById('eGasPrice').value),
+        changeTime: document.getElementById('eChangeTime').value,
+        note: document.getElementById('eNote').value
+      })
+      closeEditModal();
+      loadAllRecords();
+      alert('修改完成');
+    }
+
+    async function delRecord(docId){
+      if(!confirm('確認刪除此筆紀錄？')) return;
+      const ref = firebase.doc(db, "gas_records", docId);
+      await firebase.deleteDoc(ref);
+      loadAllRecords();
+    }
+
+    function exportExcel(){
+      const ws = XLSX.utils.json_to_sheet(window.allRecordData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "瓦斯紀錄");
+      XLSX.writeFile(wb, "瓦斯紀錄備份.xlsx");
+    }
+
+    // PDF匯出函式
+    function exportPDF(){
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p','mm','a4');
+      const title = "瓦斯使用完整紀錄報表";
+      const now = new Date().toLocaleString('zh-TW');
+
+      doc.setFontSize(18);
+      doc.text(title, 105, 18, {align:'center'});
+      doc.setFontSize(10);
+      doc.text(`匯出時間：${now}`, 105, 26, {align:'center'});
+
+      const tableData = window.allRecordData.map(item=>[
+        item.callTime || '-',
+        item.gasPrice,
+        item.changeTime || '-',
+        item.note || '-'
+      ]);
+
+      doc.autoTable({
+        startY:32,
+        head: [['呼叫瓦斯時間','瓦斯單價(元)','更換瓦斯時間','備註']],
+        body: tableData,
+        styles:{fontSize:9},
+        headStyles:{fillColor:[0,148,220]},
+        alternateRowStyles:{fillColor:[240,248,255]}
+      })
+
+      doc.save(`瓦斯紀錄報表_${new Date().getTime()}.pdf`);
+    }
+
+    function importExcel(evt){
+      const file = evt.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = async e => {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const arr = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+        if(arr.length === 0){
+          alert('Excel無資料');
+          return;
+        }
+        if(!confirm(`將匯入 ${arr.length} 筆資料，確認？`)) return;
+        for(let item of arr){
+          delete item.id;
+          await firebase.addDoc(colRef, item);
+        }
+        alert('匯入完畢');
+        loadAllRecords();
+      }
+      reader.readAsArrayBuffer(file);
+    }
+  </script>
+</body>
+</html>
